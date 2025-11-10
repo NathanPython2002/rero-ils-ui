@@ -21,14 +21,14 @@ import { PatronService } from '@app/admin/service/patron.service';
 import { TranslateService } from '@ngx-translate/core';
 import { CONFIG, DateTranslatePipe } from '@rero/ng-core';
 import { ItemStatus, User, UserService } from '@rero/shared';
+import { cloneDeep } from 'lodash-es';
 import { MessageService } from 'primeng/api';
 import { DynamicDialogRef } from 'primeng/dynamicdialog';
 import { SelectChangeEvent } from 'primeng/select';
-import { delay, forkJoin, Subscription, switchMap, tap } from 'rxjs';
+import { concatMap, delay, forkJoin, from, Subscription, switchMap, tap, toArray } from 'rxjs';
 import { LoanFixedDateService } from '../../services/loan-fixed-date.service';
 import { CirculationStatsService } from '../service/circulation-stats.service';
 import { CirculationSettingsService, ICirculationSetting } from './circulation-settings/circulation-settings.service';
-
 @Component({
   selector: 'admin-loan',
   templateUrl: './loan.component.html',
@@ -43,6 +43,7 @@ export class LoanComponent implements OnInit, OnDestroy {
   private messageService: MessageService = inject(MessageService);
   private circulationSettingsService: CirculationSettingsService = inject(CirculationSettingsService);
   private circulationStatsService: CirculationStatsService = inject(CirculationStatsService);
+  loading = false;
 
   dialogRef: DynamicDialogRef | undefined;
 
@@ -248,15 +249,21 @@ export class LoanComponent implements OnInit, OnDestroy {
         );
       }
     }
-    forkJoin(observables)
-      .pipe(
+    console.log(observables);
+    let checkedOutItems = cloneDeep(this.checkedOutItems);
+    let checkedInItems = cloneDeep(this.checkedInItems);
+    this.loading = true;
+   
+    from (observables).pipe(
+      concatMap(obs => obs),
+      toArray(),
         tap((newItems: any[]) =>
           newItems.map((newItem: Item) => {
             switch (newItem.actionDone) {
               case ItemAction.checkin: {
                 this.displayCirculationInformation(ItemAction.checkin, newItem, ItemNoteType.CHECKIN);
-                this.checkedOutItems = this.checkedOutItems.filter((currItem) => currItem.pid !== newItem.pid);
-                this.checkedInItems.unshift(newItem);
+                checkedOutItems = checkedOutItems.filter((currItem) => currItem.pid !== newItem.pid);
+                checkedInItems.unshift(newItem);
                 // display a toast message if the item goes in transit...
                 if (newItem.status === ItemStatus.IN_TRANSIT) {
                   const destination = newItem.loan.item_destination.library_name;
@@ -274,8 +281,8 @@ export class LoanComponent implements OnInit, OnDestroy {
               case ItemAction.checkout: {
                 this._displayTransactionEndDateChanged(newItem);
                 this.displayCirculationInformation(ItemAction.checkout, newItem, ItemNoteType.CHECKOUT);
-                this.checkedOutItems.unshift(newItem);
-                this.checkedInItems = this.checkedInItems.filter((currItem) => currItem.pid !== newItem.pid);
+                checkedOutItems.unshift(newItem);
+                checkedInItems = checkedInItems.filter((currItem) => currItem.pid !== newItem.pid);
                 // check if items was ready to pickup. if yes, then we need to decrement the counter
                 const idx = this.pickupItems.findIndex((item) => item.metadata.item.pid === newItem.pid);
                 if (idx > -1) {
@@ -284,8 +291,8 @@ export class LoanComponent implements OnInit, OnDestroy {
                 break;
               }
               case ItemAction.extend_loan: {
-                const index = this.checkedOutItems.findIndex((currItem) => currItem.pid === newItem.pid);
-                this.checkedOutItems[index] = newItem;
+                const index = checkedOutItems.findIndex((currItem) => currItem.pid === newItem.pid);
+                checkedOutItems[index] = newItem;
                 break;
               }
             }
@@ -296,6 +303,11 @@ export class LoanComponent implements OnInit, OnDestroy {
         switchMap(() => this.circulationStatsService.getStats(this.patron.pid))
       )
       .subscribe({
+        next: () => {
+          this.checkedOutItems = checkedOutItems;
+          this.checkedInItems = checkedInItems;
+          this.loading = false;
+        },
         error: (err) => {
           let errorMessage = '';
           if (err && err.error && err.error.message) {
@@ -328,7 +340,10 @@ export class LoanComponent implements OnInit, OnDestroy {
               closable: true,
             });
           }
+          this.checkedOutItems = checkedOutItems;
+          this.checkedInItems = checkedInItems;
           this._resetSearchInput();
+          this.loading = false;
         },
       });
   }

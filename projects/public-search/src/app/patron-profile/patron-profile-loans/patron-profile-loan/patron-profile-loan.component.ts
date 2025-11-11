@@ -14,14 +14,14 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-import { Component, inject, Input, OnInit } from '@angular/core';
+import { Component, inject, Input } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { CONFIG } from '@rero/ng-core';
 import { IOrganisation } from '@rero/shared';
 import { DateTime } from 'luxon';
 import { MessageService } from 'primeng/api';
 import { finalize } from 'rxjs/operators';
-import { CanExtend, LoanApiService } from '../../../api/loan-api.service';
+import { LoanApiService } from '../../../api/loan-api.service';
 import { PatronProfileMenuService } from '../../patron-profile-menu.service';
 import { PatronProfileService } from '../../patron-profile.service';
 
@@ -30,7 +30,7 @@ import { PatronProfileService } from '../../patron-profile.service';
     templateUrl: './patron-profile-loan.component.html',
     standalone: false
 })
-export class PatronProfileLoanComponent implements OnInit {
+export class PatronProfileLoanComponent {
 
   private loanApiService: LoanApiService = inject(LoanApiService);
   private translateService: TranslateService = inject(TranslateService);
@@ -51,11 +51,6 @@ export class PatronProfileLoanComponent implements OnInit {
   actionSuccess = false;
   /** Request in progress */
   renewInProgress = false;
-  /** Loan can extend */
-  canExtend = {
-    can: false,
-    reasons: []
-  };
   /** Fees */
   fees = 0;
 
@@ -76,12 +71,6 @@ export class PatronProfileLoanComponent implements OnInit {
       : DateTime.fromISO(this.record.metadata.due_soon_date) <= DateTime.now();
   }
 
-  /** OnInit hook */
-  ngOnInit(): void {
-    this.loanApiService
-      .canExtend(this.record.metadata.pid)
-      .subscribe((response: CanExtend) => this.canExtend = response);
-  }
 
   // COMPONENTS FUNCTIONS =====================================================
   /** Renew the current loan */
